@@ -1,0 +1,402 @@
+#define _CRT_SECURE_NO_WARNINGS
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdbool.h>
+#define MAX 51
+#define TABLES 50
+
+typedef struct product {
+	char* productName;
+	float price;
+	int quantity;
+	struct product* next;
+}product;
+
+typedef struct order {
+	char* orderProductName;
+	float orderPrice;
+	int orderProductAmount;
+	struct order* next;
+}order;
+
+typedef struct {
+	int tableNumber;
+	bool cancel;
+	order* lastOrdered;
+	order* head;
+}table;
+
+product* CreateProducts(FILE* manot);
+void FreeProducts(product* head);
+void FreeTables(table* tables);
+void AddItems(FILE* instructions, product* head, char* name, int quantity);
+void OrderItem(int tableNumber, char* productName, int amount, product* head, table* tables);
+bool checkItem(char* productName, int amount, product** temp);
+bool IsInOrder(table* tableToCheck, char* productName, int amount);
+void RemoveItem(int tableNumber, table* tables);
+void RemoveTable(int tableNumber, table* tables);
+void Error(product* head, table* tables);
+
+int main()
+{
+	FILE* instructions, * manot;
+	char functionChoise, name[MAX];
+	product* head = NULL;
+	table tables[TABLES];
+	int quantity, tableNumber, i;
+	bool firstInput = false; /*for checking if the first input is 1.*/
+	if ((instructions = fopen("Instructions.txt", "r")) == NULL) /*file opening failed*/
+	{
+		printf("\nThe file opening failed.");
+		return 1;
+	}
+
+	for (i = 0; i < TABLES; i++) /*set all tables items list to null*/
+	{
+		tables[i].head = NULL;
+		tables[i].tableNumber = i + 1;
+		tables[i].cancel = false;
+		tables[i].lastOrdered = NULL;
+	}
+
+	while ((fscanf(instructions, "%c", &functionChoise)) != EOF)
+	{
+		if (firstInput == false && functionChoise != '1') /*in case the first input is not 1 >> the kitchen won't be created!*/
+		{
+			printf("\nThe first choise must be 1. Please enter again.\n");
+			while ((fscanf(instructions, "%c", &functionChoise)) != EOF)
+				if (functionChoise == '1')
+					break;
+		}
+		firstInput = true;
+		switch (functionChoise)
+		{
+		case '1':
+		{
+			if ((manot = fopen("Manot.txt", "r")) == NULL) /*file opening failed*/
+			{
+				printf("\nThe file opening failed.");
+				exit(1);
+			}
+			head = CreateProducts(manot);
+			fclose(manot);
+			printf("The kitchen was created");
+			break;
+		}
+		case '2':
+		{
+			if (fscanf(instructions, "%s %d", name, &quantity) != 2) /*if input from file is wrong*/
+				return 1;
+			AddItems(instructions, head, name, quantity);
+			break;
+		}
+		case '3':
+		{
+			if (fscanf(instructions, "%d %s %d", &tableNumber, name, &quantity) != 3) /*if input from file is wrong*/
+				return 1;
+			OrderItem(tableNumber, name, quantity, head, tables);
+			break;
+		}
+		case '4':
+		{
+			if (fscanf(instructions, "%d", &tableNumber) != 1) /*if input from file is wrong*/
+				return 1;
+			RemoveItem(tableNumber, tables);
+			break;
+		}
+		case '5':
+		{
+			if (fscanf(instructions, "%d", &tableNumber) != 1) /*if input from file is wrong*/
+				return 1;
+			RemoveTable(tableNumber, tables);
+			break;
+		}
+		}
+	}
+	fclose(instructions);
+	FreeProducts(head);
+	FreeTables(tables);
+	return 0;
+}
+
+/*The function gets a pointer to an input file. Creates and fills a linked list of the dishes
+in the file, adds new dishes to the end of the list.*/
+product* CreateProducts(FILE* manot)
+{
+	char name[MAX]; /*name input temporary string*/
+	product* head = NULL, * tail = NULL, * temp, dish;
+	while ((fscanf(manot, "%s %d %f", name, &dish.quantity, &dish.price)) != EOF) /*while file is not ended*/
+	{
+		if ((dish.productName = (char*)malloc((strlen(name) + 1) * sizeof(char))) == NULL) /*checks if allocation worked*/
+		{
+			FreeProducts(head);
+			printf("\nMemory allocation failed.");
+			exit(1);
+		}
+		strcpy(dish.productName, name);
+
+		if ((temp = (product*)malloc(sizeof(product))) == NULL) /*checks if allocation worked*/
+		{
+			FreeProducts(head);
+			printf("\nMemory allocation failed.");
+			exit(1);
+		}
+		*temp = dish;
+
+		if (head == NULL) /*if the list is empty, adds the first product to the head.*/
+		{
+			head = temp;
+			tail = temp;
+			head->next = tail;
+		}
+		else /*if the list is not empty*/
+		{
+			tail->next = temp;
+			tail = tail->next;
+		}
+	}
+	tail->next = NULL; /*the end of the list >>> NULL*/
+	return head;
+}
+
+/*The function gets a pointer to an instructions file and to a linked list.
+Also gets a product name and new quantity.
+Gets product name and quantity from the user and updates the product in the
+list if it's exists in the list and if the quantity if valid (positive).*/
+void AddItems(FILE* instructions, product* head, char* name, int quantity)
+{
+	product* temp = head;
+	if (quantity < 0) /*the quantity must be positive*/
+	{
+		printf("\nThe quantity must be positive.");
+		return;
+	}
+	while (temp != NULL) /*runs over the linked list*/
+	{
+		if (strcmp(temp->productName, name) == 0)
+		{
+			temp->quantity = temp->quantity + quantity;
+			printf("\n%d %s added to the kitchen", quantity, name);
+			return;
+		}
+		temp = temp->next;
+	}
+	printf("\nThe item does not exist.");
+}
+
+/*The function gets a table number, a name of a product in the order, how many of it, a head of products list
+and an array of tables. Adds to the head of the order list in the specific table a new node with the product
+name, amount and price. Checks before adding using checkItem function if the product exists in the kitchen and
+if the amount if valid. Also checks if the product is already in the order using IsInOrder function. If it is
+updates the amount in node of the product in the order list. Updates lastOrdered field in the table struct.*/
+void OrderItem(int tableNumber, char* productName, int amount, product* head, table* tables)
+{
+	product* temp = head;
+	order* tempOrder;
+	if (checkItem(productName, amount, &temp) == false) /*product does not exist in the kitchen or amount is wrong*/
+		return;
+	/*please notice that temp was sent as double pointer cause checkItem changes its location to the node in the kitchen list.*/
+
+	if (IsInOrder(&tables[tableNumber - 1], productName, amount) == true) /*if product already exists in the order list*/
+	{ /*the amount and price of the product in the order list were updated in IsInOrder function*/
+		temp->quantity -= amount; /*updates the current amount of the product in the products list.*/
+	}
+	else /*if not exists in the order list >>> new node*/
+	{
+		if ((tempOrder = (order*)malloc(sizeof(order))) == NULL) /*in case the memory allocation failed*/
+			Error(head, tables); /*failure: free all memory allocations*/
+		if ((tempOrder->orderProductName = (char*)malloc((strlen(productName) + 1) * sizeof(char))) == NULL) /*in case the memory allocation failed*/
+			Error(head, tables); /*failure: free all memory allocations*/
+		else
+		{
+			strcpy(tempOrder->orderProductName, productName); /*copies the product name*/
+			tempOrder->orderProductAmount = amount; /*updates the amount of items in this order*/
+			tempOrder->orderPrice = temp->price * amount; /*updates the price of this order*/
+			if (tables[tableNumber - 1].head == NULL) /*if this order is the first of this table*/
+			{
+				tempOrder->next = NULL;
+				tables[tableNumber - 1].head = tempOrder;
+			}
+			else /*if not*/
+			{
+				tempOrder->next = tables[tableNumber - 1].head; /*organize the orders linked list*/
+				tables[tableNumber - 1].head = tempOrder;
+			}
+			temp->quantity -= amount; /*updates the current amount of the product in the products list.*/
+		}
+	}
+	printf("\n%d %s were added to table number %d", amount, productName, tableNumber);
+
+	/*updating lastOrdered product field in the table struct*/
+	if (tables[tableNumber - 1].lastOrdered == NULL) /*if last ordered hasn't been initialized*/
+	{
+		if ((tables[tableNumber - 1].lastOrdered = (order*)malloc(sizeof(order))) == NULL) /*in case the memory allocation failed*/
+			Error(head, tables); /*failure: free all memory allocations*/
+		if ((tables[tableNumber - 1].lastOrdered->orderProductName = (char*)malloc((strlen(productName) + 1) * sizeof(char))) == NULL) /*in case the memory allocation failed*/
+			Error(head, tables); /*failure: free all memory allocations*/
+	}
+	strcpy(tables[tableNumber - 1].lastOrdered->orderProductName, productName); /*updates last ordered item field.*/
+	tables[tableNumber - 1].lastOrdered->orderProductAmount = amount; /*updates last amount of the product that ordered.*/
+	tables[tableNumber - 1].lastOrdered->orderPrice = temp->price * amount; /*updates last ordered price (price of one product * amount. */
+}
+
+/*The function gets product name in an order, its amount and a double pointer to products list.
+Checks if the product order name is exists in the kitchen, if there's enough of it and it the
+amount in the order is positive. If all is okay - return 1, otherwise - returns 0.*/
+bool checkItem(char* productName, int amount, product** temp)
+{
+	bool check = false;
+	while ((*temp) != NULL) /*runs over the kitchen products to see if the order name exists.*/
+	{
+		if (strcmp((*temp)->productName, productName) == 0)
+		{
+			check = true;
+			break;
+		}
+		(*temp) = (*temp)->next;
+	}
+	if (check == false) /*if False >> The name does not exist*/
+	{
+		printf("\nWe don't have %s, sorry!", productName);
+		return false;
+	}
+	if (amount < 0) /*if amount is negative number*/
+	{
+		printf("\nAmount must be a positive number.");
+		return false;
+	}
+	if (amount > (*temp)->quantity) /*if amount of order is bigger than what is exist in the kitchen.*/
+	{
+		printf("\nWe don't have enough in our kitchen.");
+		return false;
+	}
+	return true; /*if all is okay returns true.*/
+}
+
+/*The function gets a pointer to a table, a product name to add to the order and its amount.
+If the product is already in the order, updates its amount and price in the order and returns true.
+Otherwise, returns false.*/
+bool IsInOrder(table* tableToCheck, char* productName, int amount)
+{
+	order* temp = tableToCheck->head;
+	float newPrice;
+	while (temp != NULL)
+	{
+		if (strcmp(temp->orderProductName, productName) == 0) /*checks if the name exists*/
+		{ /*updates the new amount and new price*/
+			newPrice = (temp->orderPrice / temp->orderProductAmount); /*price for single item*/
+			temp->orderProductAmount += amount;
+			temp->orderPrice = temp->orderProductAmount * newPrice;
+			return true;
+		}
+		temp = temp->next;
+	}
+	return false;
+}
+
+/*The function gets a table number and tables array. If the table's order list is not empty,
+checks if the table has returned anything before. If not, removes the last ordered item from
+the list. Frees the memory allocations.*/
+void RemoveItem(int tableNumber, table* tables)
+{
+	order* temp = tables[tableNumber - 1].head;
+	if (tables[tableNumber - 1].cancel == true) /*if one order has returned already >> only once is allowed.*/
+	{
+		printf("\nYou have already returned your last order.");
+		return;
+	}
+	if (tables[tableNumber - 1].head == NULL) /*if the order list is empty*/
+	{
+		printf("\nThere is no active order in table number %d.", tableNumber);
+		return;
+	}
+	while (temp != NULL)
+	{
+		if (strcmp(tables[tableNumber - 1].lastOrdered->orderProductName, temp->orderProductName) == 0)
+		{
+			temp->orderProductAmount -= tables[tableNumber - 1].lastOrdered->orderProductAmount; /*updates amount of the product*/
+			temp->orderPrice -= tables[tableNumber - 1].lastOrdered->orderPrice; /*updates price of the product*/
+			break;
+		}
+		temp = temp->next;
+	}
+	tables[tableNumber - 1].cancel = true; /*one cancellation is allowed.*/
+	printf("\n%d %s was returned to the kitchen from table number %d", tables[tableNumber - 1].lastOrdered->orderProductAmount, tables[tableNumber - 1].lastOrdered->orderProductName, tableNumber);
+	if (temp == tables[tableNumber - 1].head) /*if the product to return is in the head of the order list*/
+	{
+		tables[tableNumber - 1].head = tables[tableNumber - 1].head->next;
+		free(temp->orderProductName);
+		free(temp);
+	}
+}
+
+/*The function gets an array of tables and a table number, prints the table's order and
+the final price and frees the memories of the order list and the names of the products.*/
+void RemoveTable(int tableNumber, table* tables)
+{
+	float finalPrice = 0;
+	order* temp = tables[tableNumber - 1].head;
+	if (temp == NULL) /*if the table has not ordered yet.*/
+	{
+		printf("\nTable number %d has not ordered yet!", tableNumber);
+		return;
+	}
+	while (temp != NULL) /*runs over the order linked list.*/
+	{
+		printf("\n%d %s.", temp->orderProductAmount, temp->orderProductName);
+		finalPrice += temp->orderPrice;
+		tables[tableNumber - 1].head = tables[tableNumber - 1].head->next;
+		free(temp->orderProductName);
+		free(temp);
+		temp = tables[tableNumber - 1].head;
+	}
+	printf(" Your final price is %.0f NIS+%.2f NIS for tips, please!", finalPrice, 0.15 * finalPrice);
+	tables[tableNumber - 1].head = NULL; /*reset the head of the order list of the table.*/
+}
+
+/*The function is called if there is a problem with memory allocations. Gets head of products list (kitchen) and
+array of tables and frees all existed memory allocation using FreePruducts and FreeTables functions.*/
+void Error(product* head, table* tables)
+{
+	FreeProducts(head); /*frees the dishes linked list*/
+	FreeTables(tables); /*frees all tables' order linked lists*/
+	printf("\nMemory allocation failed.");
+	exit(1);
+}
+
+/*The function gets a pointer to a list and frees the memory allocations.*/
+void FreeProducts(product* head)
+{
+	product* temp = head;
+	while (temp != NULL) /*runs over the linked list of products.*/
+	{
+		free(temp->productName);
+		head = head->next;
+		free(temp);
+		temp = head;
+	}
+}
+
+/*The function gets a tables array and frees the memory allocations of the orders lists.*/
+void FreeTables(table* tables)
+{
+	int i;
+	order* temp;
+	for (i = 0; i < TABLES; i++) /*runs over the tables array*/
+	{
+		temp = tables[i].head;
+		if (temp != NULL)
+		{
+			free(tables[i].lastOrdered->orderProductName);
+			free(tables[i].lastOrdered);
+		}
+		while (temp != NULL) /*frees the orders linked list and the names allocations.*/
+		{
+			free(temp->orderProductName);
+			tables[i].head = tables[i].head->next;
+			free(temp);
+			temp = tables[i].head;
+		}
+	}
+}
