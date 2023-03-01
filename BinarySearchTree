@@ -1,0 +1,259 @@
+#define _CRT_SECURE_NO_WARNINGS
+#include <stdio.h>
+#include <stdlib.h>
+
+typedef struct tree {
+	int key;
+	struct tree* left;
+	struct tree* right;
+} tree;
+
+int choose();
+int isEmpty(int nodeCount);
+int insert(tree** root, int num); //1
+void printInOrder(tree* root); //2
+int height(tree* root); //3
+int maximum(tree* root); //4
+int isExist(tree* root, int num); //5
+void printSmallestValues(tree* root, int* k); //6
+void error(tree* root, char* string);
+void freeTree(tree** root);
+
+int main()
+{
+	tree* root = NULL;
+	int choise, num, flag, nodeCount = 0, count = 0;
+	choise = choose();
+	while (choise != 0)
+	{
+		if (choise == 9)
+			error(root, "\nError");
+		switch (choise)
+		{
+		case 1: //Inserting a new node to the tree
+		{
+			printf("\nPlease enter an integer for inserting to the tree: ");
+			do
+			{
+				if (scanf("%d", &num) != 1)
+					error(root, "\nError");
+				flag = insert(&root, num);
+				if (flag == 1) //"insert" returns 1 if there was an error.
+					error(root, "\nMemory allocation failed.");
+			} while (flag == 2); //"insert" returns 2 if the number already exists.
+			nodeCount++;
+			break;
+		}
+		case 2: //Printing the tree
+		{
+			if (isEmpty(nodeCount) == 1) //tree's not empty
+			{
+				printf("\nThe tree is:");
+				printInOrder(root);
+			}
+			break;
+		}
+		case 3: //Calculating the tree's height
+		{
+			if (isEmpty(nodeCount) == 1) //tree's not empty
+				printf("The tree's height is: %d.", height(root));
+			break;
+		}
+		case 4: //Finding the maximum in the tree
+		{
+			if (isEmpty(nodeCount) == 1) //tree's not empty
+				printf("\nThe maximum key in the tree is: %d.", maximum(root));
+			break;
+		}
+		case 5: //Checking if key exists in the tree
+		{
+			if (isEmpty(nodeCount) == 1) //tree's not empty
+			{
+				printf("\nPlease enter an integer to check if exists: ");
+				if (scanf("%d", &num) != 1)
+					error(root, "\nError");
+				printf("\n%s", isExist(root, num) == 1 ? "\nThe key exists." : "\nThe key does not exists.");
+			}
+			break;
+		}
+		case 6: //Printing first k smallest keys
+		{
+			if (isEmpty(nodeCount) == 1) //tree's not empty
+			{
+				printf("\nPlease choose a 'k' for printing the k smallest nodes: ");
+				do
+				{
+					if (scanf("%d", &num) != 1)
+						error(root, "\nError");
+					if (num > nodeCount || num <= 0)
+						printf("\nThe 'k' must be less than the nodes amount (which is currently %d) and positive. Enter again: ", nodeCount);
+				} while (num > nodeCount || num <= 0);
+				printf("\nThe %d smallest values in the tree are:", num);
+				printSmallestValues(root, &num);
+			}
+			break;
+		}
+		}
+		choise = choose();
+	}
+	printf("\nFinish.");
+	freeTree(&root);
+	return 0;
+}
+
+//Function for choosing an option from the menu (1,2,3,4,5,6,0).
+//if 9 is returned: error. if 0 is returned: finish.
+int choose()
+{
+	int choise;
+	printf("\nPlease choose from the menu:");
+	printf("\n1 - Inserting a new node to the tree");
+	printf("\n2 - Printing the tree");
+	printf("\n3 - Calculating the tree's height");
+	printf("\n4 - Finding the maximum in the tree");
+	printf("\n5 - Checking if key exists in the tree");
+	printf("\n6 - Printing first k smallest keys");
+	printf("\n0 - exit");
+	printf("\n\nYour choise: ");
+	if (scanf("%d", &choise) != 1)
+		return 9; //error
+	else
+	{
+		if (choise < 0 || choise > 6)
+		{
+			printf("\nPlease enter a valid digit.");
+			choose(); //the function calls itself for another try.
+		}
+		else
+			return choise;
+	}
+}
+
+//The function checks if the tree's empty. If it is - prints it and returns 0.
+//Otherwise returns 1.
+int isEmpty(int nodeCount)
+{
+	if (nodeCount == 0)
+	{
+		printf("\nThe tree is empty.");
+		return 0;
+	}
+	else
+		return 1;
+}
+
+//#1: Function for inserting a new key into its right position in the tree.
+//returns 0 - if everything went well, 1 - errors, 2 - key exists.
+int insert(tree** root, int num)
+{
+	if (*root == NULL) //the tree is empty
+	{
+		if ((*root = (tree*)malloc(sizeof(tree))) == NULL)
+			return 1; //error
+		else //allocation succeed
+		{
+			(*root)->key = num;
+			(*root)->right = (*root)->left = NULL;
+		}
+		return 0;
+	}
+	else //the tree is not empty
+	{
+		if (num == (*root)->key)
+		{
+			printf("\nThis key is already exists in the tree. Please enter another one: ");
+			return 2;
+		}
+		else if (num > (*root)->key)
+			insert(&(*root)->right, num);
+		else
+			insert(&(*root)->left, num);
+	}
+}
+
+//#2: Function for printing the tree in "in order" method.
+void printInOrder(tree* root)
+{
+	if (root == NULL) //if the tree's empty
+		return;
+	printInOrder(root->left);
+	printf(" %d ", root->key);
+	printInOrder(root->right);
+}
+
+//#3: Function for calculating the tree's height. Returns it.
+int height(tree* root)
+{
+	int left, right;
+	if (root == NULL)
+		return -1;
+	left = height(root->left);
+	right = height(root->right);
+	if (left > right)
+		return 1 + left;
+	else
+		return 1 + right;
+}
+
+//#4: Function for finding the maximum value in the tree. Returns it.
+int maximum(tree* root)
+{
+	int max = root->key;
+	while (root->right != NULL)
+	{
+		root = root->right;
+		if (max < root->key)
+			max = root->key;
+	}
+	return max;
+}
+
+//#5: Function for checking if the given num exists in the tree.
+//Returns the result: exist - 0 or not - 1;
+int isExist(tree* root, int num)
+{
+	if (root == NULL) //if the tree's empty or does not exist
+		return 1;
+	if (root->key == num)
+		return 0;
+	if (num < root->key)
+		isExist(root->left, num);
+	else
+		isExist(root->right, num);
+}
+
+//#6: Function for printing the first k smallest keys in the tree.
+void printSmallestValues(tree* root, int* k)
+{
+	if (root == NULL)
+		return;
+	printSmallestValues(root->left, k);
+	if ((*k) > 0)
+	{
+		printf(" %d ", root->key);
+		(*k)--;
+	}
+	printSmallestValues(root->right, k);
+}
+
+//Function for printing an error message, freeing the memory and exiting with 1 code.
+void error(tree* root, char* string)
+{
+	printf("%s", string);
+	freeTree(&root);
+	exit(1);
+}
+
+//Function for freeing all the memory allocations.
+void freeTree(tree** root)
+{
+	if ((*root) == NULL)
+		return;
+	else
+	{
+		freeTree(&(*root)->right);
+		freeTree(&(*root)->left);
+		free(*root);
+		*root = NULL;
+	}
+}
