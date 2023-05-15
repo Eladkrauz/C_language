@@ -16,7 +16,6 @@ int maxArea(int* height, int heightSize);
 int main()
 {
     int arr[] = { 1,8,6,2,5,4,8,3,7 };
-    //int arr[] = { 1,2,1 };
     printf("\nRESULT: %d", maxArea(arr, 9));
     return 0;
 }
